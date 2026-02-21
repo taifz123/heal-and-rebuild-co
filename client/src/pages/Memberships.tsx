@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { trpc } from "@/lib/trpc";
 import { Link } from "wouter";
 import { ArrowLeft, Check } from "lucide-react";
-import { getLoginUrl } from "@/const";
+import { LOGIN_PATH } from "@/const";
 import { toast } from "sonner";
 
 export default function Memberships() {
@@ -72,11 +72,11 @@ export default function Memberships() {
                   </Button>
                 </Link>
               ) : (
-                <a href={getLoginUrl()}>
+                <Link href={LOGIN_PATH}>
                   <Button variant="default" size="sm">
                     Sign In
                   </Button>
-                </a>
+                </Link>
               )}
             </div>
           </div>
@@ -146,11 +146,11 @@ export default function Memberships() {
                         {createCheckout.isPending ? 'Processing...' : 'Select Plan'}
                       </Button>
                     ) : (
-                      <a href={getLoginUrl()} className="w-full">
+                      <Link href={LOGIN_PATH} className="w-full">
                         <Button className="w-full" size="lg">
                           Sign In to Continue
                         </Button>
-                      </a>
+                      </Link>
                     )}
                   </CardFooter>
                 </Card>

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import { Link } from "wouter";
 import { ArrowLeft, Gift } from "lucide-react";
-import { getLoginUrl } from "@/const";
+import { LOGIN_PATH } from "@/const";
 import { toast } from "sonner";
 import { useState } from "react";
 
@@ -59,9 +59,9 @@ export default function GiftVouchers() {
         <div className="text-center max-w-md mx-auto px-6">
           <h2 className="text-3xl font-light mb-4">Sign In Required</h2>
           <p className="text-muted-foreground mb-6">Please sign in to purchase or redeem gift vouchers</p>
-          <a href={getLoginUrl()}>
+          <Link href={LOGIN_PATH}>
             <Button size="lg">Sign In</Button>
-          </a>
+          </Link>
         </div>
       </div>
     );

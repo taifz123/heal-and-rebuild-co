@@ -38,6 +38,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+.manus-logs/
 
 # Runtime data
 pids
@@ -106,5 +107,5 @@ temp/
 *.sqlite
 *.sqlite3
 
-# Webdev artifacts (checkpoint zips, migrations, etc.)
-.webdev/
+# Replit-specific (do not commit)
+.replit.nix.lock

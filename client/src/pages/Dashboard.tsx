@@ -5,7 +5,6 @@ import { trpc } from "@/lib/trpc";
 import { Link, useLocation } from "wouter";
 import { Calendar, CreditCard, Clock, X } from "lucide-react";
 import { toast } from "sonner";
-import { getLoginUrl } from "@/const";
 import { format } from "date-fns";
 
 export default function Dashboard() {
@@ -42,9 +41,9 @@ export default function Dashboard() {
         <div className="text-center max-w-md mx-auto px-6">
           <h2 className="text-3xl font-light mb-4">Sign In Required</h2>
           <p className="text-muted-foreground mb-6">Please sign in to view your dashboard</p>
-          <a href={getLoginUrl()}>
+          <Link href="/login">
             <Button size="lg">Sign In</Button>
-          </a>
+          </Link>
         </div>
       </div>
     );

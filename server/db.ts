@@ -1,7 +1,6 @@
 import { eq, and, gte, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { 
-  InsertUser, 
   users, 
   membershipTiers, 
   memberships, 
@@ -9,6 +8,7 @@ import {
   bookings, 
   giftVouchers, 
   emailNotifications,
+  type InsertUser,
   type MembershipTier,
   type Membership,
   type ServiceType,
@@ -21,7 +21,6 @@ import {
   type InsertGiftVoucher,
   type InsertEmailNotification
 } from "../drizzle/schema";
-import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -37,78 +36,42 @@ export async function getDb() {
   return _db;
 }
 
-export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) {
-    throw new Error("User openId is required for upsert");
-  }
+// ─── Users ────────────────────────────────────────────────────────────────────
 
+export async function getUserById(id: number) {
   const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot upsert user: database not available");
-    return;
-  }
+  if (!db) return undefined;
 
-  try {
-    const values: InsertUser = {
-      openId: user.openId,
-    };
-    const updateSet: Record<string, unknown> = {};
-
-    const textFields = ["name", "email", "loginMethod"] as const;
-    type TextField = (typeof textFields)[number];
-
-    const assignNullable = (field: TextField) => {
-      const value = user[field];
-      if (value === undefined) return;
-      const normalized = value ?? null;
-      values[field] = normalized;
-      updateSet[field] = normalized;
-    };
-
-    textFields.forEach(assignNullable);
-
-    if (user.lastSignedIn !== undefined) {
-      values.lastSignedIn = user.lastSignedIn;
-      updateSet.lastSignedIn = user.lastSignedIn;
-    }
-    if (user.role !== undefined) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
-    }
-
-    if (!values.lastSignedIn) {
-      values.lastSignedIn = new Date();
-    }
-
-    if (Object.keys(updateSet).length === 0) {
-      updateSet.lastSignedIn = new Date();
-    }
-
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
-      set: updateSet,
-    });
-  } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
-    throw error;
-  }
-}
-
-export async function getUserByOpenId(openId: string) {
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot get user: database not available");
-    return undefined;
-  }
-
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
 
-// Membership Tiers
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function createUser(user: InsertUser) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(users).values(user);
+  const insertId = (result as any)[0]?.insertId ?? (result as any).insertId;
+  return getUserById(Number(insertId));
+}
+
+export async function updateUserLastSignedIn(id: number) {
+  const db = await getDb();
+  if (!db) return;
+
+  await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, id));
+}
+
+// ─── Membership Tiers ─────────────────────────────────────────────────────────
+
 export async function getAllMembershipTiers() {
   const db = await getDb();
   if (!db) return [];
@@ -132,7 +95,8 @@ export async function createMembershipTier(tier: InsertMembershipTier) {
   return result;
 }
 
-// Memberships
+// ─── Memberships ──────────────────────────────────────────────────────────────
+
 export async function getUserMemberships(userId: number) {
   const db = await getDb();
   if (!db) return [];
@@ -174,7 +138,8 @@ export async function updateMembership(id: number, updates: Partial<Membership>)
   await db.update(memberships).set(updates).where(eq(memberships.id, id));
 }
 
-// Service Types
+// ─── Service Types ────────────────────────────────────────────────────────────
+
 export async function getAllServiceTypes() {
   const db = await getDb();
   if (!db) return [];
@@ -198,7 +163,8 @@ export async function createServiceType(service: InsertServiceType) {
   return result;
 }
 
-// Bookings
+// ─── Bookings ─────────────────────────────────────────────────────────────────
+
 export async function getUserBookings(userId: number) {
   const db = await getDb();
   if (!db) return [];
@@ -236,7 +202,8 @@ export async function updateBooking(id: number, updates: Partial<Booking>) {
   await db.update(bookings).set(updates).where(eq(bookings.id, id));
 }
 
-// Gift Vouchers
+// ─── Gift Vouchers ────────────────────────────────────────────────────────────
+
 export async function getGiftVoucherByCode(code: string) {
   const db = await getDb();
   if (!db) return undefined;
@@ -260,7 +227,8 @@ export async function updateGiftVoucher(id: number, updates: Partial<GiftVoucher
   await db.update(giftVouchers).set(updates).where(eq(giftVouchers.id, id));
 }
 
-// Email Notifications
+// ─── Email Notifications ──────────────────────────────────────────────────────
+
 export async function createEmailNotification(notification: InsertEmailNotification) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -276,7 +244,8 @@ export async function getUserEmailNotifications(userId: number) {
   return await db.select().from(emailNotifications).where(eq(emailNotifications.userId, userId)).orderBy(desc(emailNotifications.createdAt));
 }
 
-// Admin queries
+// ─── Admin Queries ────────────────────────────────────────────────────────────
+
 export async function getAllUsers() {
   const db = await getDb();
   if (!db) return [];

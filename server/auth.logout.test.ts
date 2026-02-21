@@ -15,10 +15,9 @@ function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] }
 
   const user: AuthenticatedUser = {
     id: 1,
-    openId: "sample-user",
     email: "sample@example.com",
     name: "Sample User",
-    loginMethod: "manus",
+    passwordHash: null,
     role: "user",
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -58,5 +57,16 @@ describe("auth.logout", () => {
       httpOnly: true,
       path: "/",
     });
+  });
+
+  it("returns null for unauthenticated auth.me", async () => {
+    const ctx: TrpcContext = {
+      user: null,
+      req: {} as TrpcContext["req"],
+      res: {} as TrpcContext["res"],
+    };
+    const caller = appRouter.createCaller(ctx);
+    const me = await caller.auth.me();
+    expect(me).toBeNull();
   });
 });
