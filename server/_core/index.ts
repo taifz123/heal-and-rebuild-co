@@ -7,6 +7,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { ENV } from "./env";
+import { startWeeklyResetScheduler } from "../services/weeklyResetService";
 
 async function startServer() {
   const app = express();
@@ -46,6 +47,9 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+
+    // Start the weekly quota reset scheduler
+    startWeeklyResetScheduler();
   });
 }
 
