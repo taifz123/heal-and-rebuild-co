@@ -14,6 +14,9 @@ import {
   webhookEvents,
   paymentTransactions,
   subscriptions,
+  authAccounts,
+  emailOtps,
+  auditLogs,
   type InsertUser,
   type MembershipTier,
   type Membership,
@@ -32,12 +35,18 @@ import {
   type InsertWebhookEvent,
   type InsertPaymentTransaction,
   type InsertSubscription,
+  type InsertAuthAccount,
+  type InsertEmailOtp,
+  type InsertAuditLog,
   type SessionSlot,
   type Subscription,
   type WeeklyUsage,
   type AdminOverride,
   type WebhookEvent,
   type PaymentTransaction,
+  type AuthAccount,
+  type EmailOtp,
+  type AuditLog,
 } from "../drizzle/schema";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -647,4 +656,136 @@ export async function getUserEmailNotifications(userId: number) {
     .from(emailNotifications)
     .where(eq(emailNotifications.userId, userId))
     .orderBy(desc(emailNotifications.createdAt));
+}
+
+// ─── Auth Accounts ───────────────────────────────────────────────────────────
+
+export async function getAuthAccount(provider: string, providerUserId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select()
+    .from(authAccounts)
+    .where(
+      and(
+        eq(authAccounts.provider, provider),
+        eq(authAccounts.providerUserId, providerUserId)
+      )
+    )
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getAuthAccountsByUserId(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select()
+    .from(authAccounts)
+    .where(eq(authAccounts.userId, userId));
+}
+
+export async function createAuthAccount(account: InsertAuthAccount) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(authAccounts).values(account);
+  const insertId = (result as any)[0]?.insertId ?? (result as any).insertId;
+  return { id: Number(insertId) };
+}
+
+// ─── Email OTPs ──────────────────────────────────────────────────────────────
+
+export async function createEmailOtp(otp: InsertEmailOtp) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(emailOtps).values(otp);
+  const insertId = (result as any)[0]?.insertId ?? (result as any).insertId;
+  return { id: Number(insertId) };
+}
+
+export async function getLatestEmailOtp(email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select()
+    .from(emailOtps)
+    .where(
+      and(
+        eq(emailOtps.email, email),
+        eq(emailOtps.used, false),
+        gte(emailOtps.expiresAt, new Date())
+      )
+    )
+    .orderBy(desc(emailOtps.createdAt))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function markOtpUsed(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(emailOtps).set({ used: true }).where(eq(emailOtps.id, id));
+}
+
+export async function incrementOtpAttempts(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(emailOtps)
+    .set({ attempts: sql`${emailOtps.attempts} + 1` })
+    .where(eq(emailOtps.id, id));
+}
+
+export async function invalidateOtpsForEmail(email: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(emailOtps)
+    .set({ used: true })
+    .where(and(eq(emailOtps.email, email), eq(emailOtps.used, false)));
+}
+
+// ─── Audit Logs ──────────────────────────────────────────────────────────────
+
+export async function createAuditLog(log: InsertAuditLog) {
+  const db = await getDb();
+  if (!db) return; // Audit logging is best-effort
+  try {
+    await db.insert(auditLogs).values(log);
+  } catch (err) {
+    console.error("[AuditLog] Failed to write:", err);
+  }
+}
+
+export async function getAuditLogs(filters?: {
+  userId?: number;
+  action?: string;
+  entityType?: string;
+  limit?: number;
+}) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions: any[] = [];
+  if (filters?.userId) conditions.push(eq(auditLogs.userId, filters.userId));
+  if (filters?.action) conditions.push(eq(auditLogs.action, filters.action));
+  if (filters?.entityType) conditions.push(eq(auditLogs.entityType, filters.entityType));
+  return await db
+    .select()
+    .from(auditLogs)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(auditLogs.createdAt))
+    .limit(filters?.limit ?? 100);
+}
+
+// ─── User Status ─────────────────────────────────────────────────────────────
+
+export async function updateUserStatus(id: number, status: "active" | "suspended") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ status }).where(eq(users.id, id));
+}
+
+export async function getUserStatus(id: number): Promise<string | undefined> {
+  const user = await getUserById(id);
+  return user?.status;
 }

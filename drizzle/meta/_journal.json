@@ -29,6 +29,13 @@
       "when": 1771600000000,
       "tag": "0003_full_booking_system",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1771700000000,
+      "tag": "0004_auth_security_audit",
+      "breakpoints": true
     }
   ]
 }

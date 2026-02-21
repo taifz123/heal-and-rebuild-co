@@ -11,7 +11,9 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
-    "db:seed": "node seed-tiers.mjs"
+    "db:seed": "node seed-data.mjs",
+    "db:seed:tiers": "node seed-tiers.mjs",
+    "load-test": "node load-test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",
@@ -54,6 +56,7 @@
     "cmdk": "^1.1.1",
     "cookie": "^1.0.2",
     "date-fns": "^4.1.0",
+    "date-fns-tz": "^3.2.0",
     "dotenv": "^17.2.2",
     "drizzle-orm": "^0.44.5",
     "embla-carousel-react": "^8.6.0",
@@ -63,6 +66,8 @@
     "jose": "6.1.0",
     "lucide-react": "^0.453.0",
     "mysql2": "^3.15.0",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.16",
     "nanoid": "^5.1.5",
     "next-themes": "^0.4.6",
     "react": "^19.2.1",
@@ -85,6 +90,8 @@
     "@tailwindcss/typography": "^0.5.15",
     "@tailwindcss/vite": "^4.1.3",
     "@types/bcryptjs": "^2.4.6",
+    "@types/node-cron": "^3.0.11",
+    "@types/nodemailer": "^6.4.17",
     "@types/express": "4.17.21",
     "@types/google.maps": "^3.58.1",
     "@types/node": "^24.7.0",

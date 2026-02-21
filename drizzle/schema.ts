@@ -26,6 +26,7 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 320 }).notNull().unique(),
   passwordHash: varchar("password_hash", { length: 255 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  status: mysqlEnum("user_status", ["active", "suspended"]).default("active").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -33,6 +34,43 @@ export const users = mysqlTable("users", {
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   1b. AUTH ACCOUNTS  (multi-provider: google, email, password)
+   ═══════════════════════════════════════════════════════════════════════════ */
+export const authAccounts = mysqlTable(
+  "auth_accounts",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("user_id").notNull(),
+    provider: varchar("provider", { length: 50 }).notNull(), // "google" | "email" | "password"
+    providerUserId: varchar("provider_user_id", { length: 320 }).notNull(), // Google sub ID or email
+    verified: boolean("verified").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("uq_provider_user").on(table.provider, table.providerUserId),
+  ]
+);
+
+export type AuthAccount = typeof authAccounts.$inferSelect;
+export type InsertAuthAccount = typeof authAccounts.$inferInsert;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   1c. EMAIL OTPs  (6-digit codes for passwordless email login)
+   ═══════════════════════════════════════════════════════════════════════════ */
+export const emailOtps = mysqlTable("email_otps", {
+  id: int("id").autoincrement().primaryKey(),
+  email: varchar("email", { length: 320 }).notNull(),
+  code: varchar("code", { length: 10 }).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").default(false).notNull(),
+  attempts: int("attempts").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type EmailOtp = typeof emailOtps.$inferSelect;
+export type InsertEmailOtp = typeof emailOtps.$inferInsert;
 
 /* ═══════════════════════════════════════════════════════════════════════════
    2. MEMBERSHIP TIERS
@@ -317,3 +355,20 @@ export const emailNotifications = mysqlTable("email_notifications", {
 
 export type EmailNotification = typeof emailNotifications.$inferSelect;
 export type InsertEmailNotification = typeof emailNotifications.$inferInsert;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   14. AUDIT LOGS  (general-purpose audit trail)
+   ═══════════════════════════════════════════════════════════════════════════ */
+export const auditLogs = mysqlTable("audit_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("user_id"),
+  action: varchar("action", { length: 100 }).notNull(),
+  entityType: varchar("entity_type", { length: 50 }),
+  entityId: int("entity_id"),
+  details: text("details"),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = typeof auditLogs.$inferInsert;

@@ -1,4 +1,3 @@
-import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,50 +5,29 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
 import { Link } from "wouter";
 import {
-  Users,
-  Calendar,
-  DollarSign,
-  TrendingUp,
-  Activity,
-  Search,
-  Plus,
-  Eye,
-  Settings,
-  CreditCard,
-  BarChart3,
+  Users, Calendar, DollarSign, TrendingUp, Activity, Search, Plus, Eye,
+  CreditCard, BarChart3, AlertTriangle, ShieldAlert, FileText,
 } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, differenceInDays } from "date-fns";
 import { useState } from "react";
 
 export default function Admin() {
-  const { user, isAuthenticated } = useAuth();
   const utils = trpc.useUtils();
 
   // ── State ──────────────────────────────────────────────────────────────
@@ -60,6 +38,8 @@ export default function Admin() {
   const [overrideReason, setOverrideReason] = useState("");
   const [showMemberDialog, setShowMemberDialog] = useState(false);
   const [showSlotDialog, setShowSlotDialog] = useState(false);
+  const [bookingStatusFilter, setBookingStatusFilter] = useState<string>("all");
+  const [memberStatusFilter, setMemberStatusFilter] = useState<string>("all");
   const [newSlot, setNewSlot] = useState({
     name: "",
     startsAtUtc: "",
@@ -69,18 +49,15 @@ export default function Admin() {
   });
 
   // ── Queries ────────────────────────────────────────────────────────────
-  const isAdmin = isAuthenticated && user?.role === "admin";
-
-  const { data: stats } = trpc.admin.getDashboardStats.useQuery(undefined, { enabled: isAdmin });
-  const { data: users } = trpc.admin.getUsers.useQuery(undefined, { enabled: isAdmin });
-  const { data: bookings } = trpc.bookings.getAll.useQuery(undefined, { enabled: isAdmin });
-  const { data: memberships } = trpc.memberships.getAll.useQuery(undefined, { enabled: isAdmin });
-  const { data: subscriptions } = trpc.subscriptions.getAll.useQuery(undefined, { enabled: isAdmin });
-  const { data: sessionSlots } = trpc.sessionSlots.getAll.useQuery(undefined, { enabled: isAdmin });
-  const { data: revenue } = trpc.admin.getRevenue.useQuery(undefined, { enabled: isAdmin });
+  const { data: stats } = trpc.admin.getDashboardStats.useQuery();
+  const { data: users } = trpc.admin.getUsers.useQuery();
+  const { data: bookings } = trpc.bookings.getAll.useQuery();
+  const { data: subscriptions } = trpc.subscriptions.getAll.useQuery();
+  const { data: sessionSlots } = trpc.sessionSlots.getAll.useQuery();
+  const { data: revenue } = trpc.admin.getRevenue.useQuery();
   const { data: memberDetail } = trpc.admin.getMemberDetail.useQuery(
     { userId: selectedUserId! },
-    { enabled: isAdmin && !!selectedUserId }
+    { enabled: !!selectedUserId }
   );
 
   // ── Mutations ──────────────────────────────────────────────────────────
@@ -98,6 +75,7 @@ export default function Admin() {
       toast.success(data.message);
       utils.admin.getMemberDetail.invalidate();
       utils.admin.getDashboardStats.invalidate();
+      utils.admin.getUsers.invalidate();
       setOverrideReason("");
       setOverrideDelta("");
     },
@@ -114,29 +92,20 @@ export default function Admin() {
     onError: (err) => toast.error(err.message),
   });
 
-  // ── Access Guard ───────────────────────────────────────────────────────
-  if (!isAdmin) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto px-6">
-          <h2 className="text-3xl font-light mb-4">Access Denied</h2>
-          <p className="text-muted-foreground mb-6">Admin access required</p>
-          <Link href="/">
-            <Button size="lg">Go Home</Button>
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  // ── Filtering ──────────────────────────────────────────────────────────
+  const filteredUsers = users?.filter((u) => {
+    const matchesSearch = !searchQuery ||
+      u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.email?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = memberStatusFilter === "all" || u.status === memberStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
-  const filteredUsers = searchQuery
-    ? users?.filter(
-        (u) =>
-          u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          u.email?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : users;
+  const filteredBookings = bookings?.filter((b) => {
+    return bookingStatusFilter === "all" || b.status === bookingStatusFilter;
+  });
 
+  // ── Helpers ────────────────────────────────────────────────────────────
   const handleApplyOverride = () => {
     if (!selectedUserId || !overrideReason) {
       toast.error("Please fill in all required fields");
@@ -166,21 +135,36 @@ export default function Admin() {
 
   const statusBadge = (status: string) => {
     const colors: Record<string, string> = {
-      active: "bg-green-100 text-green-800",
-      confirmed: "bg-green-100 text-green-800",
-      pending: "bg-yellow-100 text-yellow-800",
-      cancelled: "bg-red-100 text-red-800",
-      completed: "bg-blue-100 text-blue-800",
-      expired: "bg-gray-100 text-gray-800",
-      past_due: "bg-orange-100 text-orange-800",
-      suspended: "bg-red-100 text-red-800",
-      no_show: "bg-gray-100 text-gray-800",
+      active: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+      confirmed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+      pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+      cancelled: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+      completed: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+      expired: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400",
+      past_due: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
+      suspended: "bg-red-200 text-red-900 dark:bg-red-900/40 dark:text-red-300",
+      no_show: "bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-400",
+      user: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+      admin: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
     };
     return (
-      <Badge className={`text-xs ${colors[status] || "bg-gray-100 text-gray-800"}`}>
+      <Badge className={`text-xs font-medium ${colors[status] || "bg-gray-100 text-gray-800"}`}>
         {status}
       </Badge>
     );
+  };
+
+  /** Detect churn risk: no bookings in last 14 days + has active subscription */
+  const getChurnSignal = (u: any) => {
+    if (!u.lastSignedIn) return null;
+    const daysSinceLogin = differenceInDays(new Date(), new Date(u.lastSignedIn));
+    if (daysSinceLogin > 14) {
+      return { level: "warning" as const, days: daysSinceLogin };
+    }
+    if (daysSinceLogin > 30) {
+      return { level: "critical" as const, days: daysSinceLogin };
+    }
+    return null;
   };
 
   return (
@@ -287,10 +271,13 @@ export default function Admin() {
                 <TabsTrigger value="subscriptions">Subscriptions</TabsTrigger>
                 <TabsTrigger value="revenue">Revenue</TabsTrigger>
                 <TabsTrigger value="overrides">Overrides</TabsTrigger>
+                <TabsTrigger value="audit">Audit Log</TabsTrigger>
               </TabsList>
             </div>
 
-            {/* ── Members Tab ──────────────────────────────────────── */}
+            {/* ═══════════════════════════════════════════════════════════
+                MEMBERS TAB — with status filter, churn signals, status badges
+            ═══════════════════════════════════════════════════════════ */}
             <TabsContent value="members">
               <Card className="border-2">
                 <CardHeader>
@@ -299,14 +286,26 @@ export default function Admin() {
                       <CardTitle className="text-xl sm:text-2xl">Members</CardTitle>
                       <CardDescription>View and manage user accounts</CardDescription>
                     </div>
-                    <div className="relative w-full sm:w-64">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search by name or email..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-9"
-                      />
+                    <div className="flex gap-2 flex-col sm:flex-row">
+                      <Select value={memberStatusFilter} onValueChange={setMemberStatusFilter}>
+                        <SelectTrigger className="w-[140px]">
+                          <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Status</SelectItem>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="suspended">Suspended</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <div className="relative w-full sm:w-64">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search by name or email..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
                     </div>
                   </div>
                 </CardHeader>
@@ -319,47 +318,82 @@ export default function Admin() {
                           <TableHead>Name</TableHead>
                           <TableHead>Email</TableHead>
                           <TableHead>Role</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Churn Risk</TableHead>
+                          <TableHead>Last Login</TableHead>
                           <TableHead>Joined</TableHead>
                           <TableHead>Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredUsers?.map((u) => (
-                          <TableRow key={u.id}>
-                            <TableCell className="font-mono text-xs">#{u.id}</TableCell>
-                            <TableCell>{u.name || "-"}</TableCell>
-                            <TableCell className="text-xs">{u.email || "-"}</TableCell>
-                            <TableCell>{statusBadge(u.role)}</TableCell>
-                            <TableCell className="text-xs">
-                              {format(new Date(u.createdAt), "MMM d, yyyy")}
-                            </TableCell>
-                            <TableCell>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedUserId(u.id);
-                                  setShowMemberDialog(true);
-                                }}
-                              >
-                                <Eye className="h-3 w-3 mr-1" /> View
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {filteredUsers?.map((u) => {
+                          const churn = getChurnSignal(u);
+                          return (
+                            <TableRow key={u.id} className={u.status === "suspended" ? "opacity-60" : ""}>
+                              <TableCell className="font-mono text-xs">#{u.id}</TableCell>
+                              <TableCell>{u.name || "-"}</TableCell>
+                              <TableCell className="text-xs">{u.email || "-"}</TableCell>
+                              <TableCell>{statusBadge(u.role)}</TableCell>
+                              <TableCell>{statusBadge(u.status || "active")}</TableCell>
+                              <TableCell>
+                                {churn ? (
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-xs gap-1 ${
+                                      churn.level === "critical"
+                                        ? "border-red-300 text-red-700"
+                                        : "border-orange-300 text-orange-700"
+                                    }`}
+                                  >
+                                    <AlertTriangle className="h-3 w-3" />
+                                    {churn.days}d inactive
+                                  </Badge>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">-</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                {u.lastSignedIn
+                                  ? format(new Date(u.lastSignedIn), "MMM d, h:mm a")
+                                  : "Never"}
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                {format(new Date(u.createdAt), "MMM d, yyyy")}
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedUserId(u.id);
+                                    setShowMemberDialog(true);
+                                  }}
+                                >
+                                  <Eye className="h-3 w-3 mr-1" /> View
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
+                    {filteredUsers?.length === 0 && (
+                      <p className="text-center py-8 text-muted-foreground">No members match your filters</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Member Detail Dialog */}
+              {/* ── Member Detail Dialog with Confirmation Modals ────── */}
               <Dialog open={showMemberDialog} onOpenChange={setShowMemberDialog}>
                 <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                   <DialogHeader>
-                    <DialogTitle>Member Detail</DialogTitle>
+                    <DialogTitle className="flex items-center gap-2">
+                      Member Detail
+                      {memberDetail?.user?.status && statusBadge(memberDetail.user.status)}
+                    </DialogTitle>
                     <DialogDescription>
-                      {memberDetail?.user?.name} ({memberDetail?.user?.email})
+                      {memberDetail?.user?.name || "Unnamed"} ({memberDetail?.user?.email})
                     </DialogDescription>
                   </DialogHeader>
                   {memberDetail && (
@@ -383,6 +417,25 @@ export default function Admin() {
                             </p>
                           </div>
                         </div>
+                        {/* Usage progress bar */}
+                        <div className="mt-3">
+                          <div className="w-full bg-secondary rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full transition-all ${
+                                memberDetail.currentWeek.sessionsUsed >= memberDetail.currentWeek.sessionsLimit
+                                  ? "bg-red-500"
+                                  : memberDetail.currentWeek.sessionsUsed >= memberDetail.currentWeek.sessionsLimit * 0.8
+                                  ? "bg-yellow-500"
+                                  : "bg-green-500"
+                              }`}
+                              style={{
+                                width: `${Math.min(100, memberDetail.currentWeek.sessionsLimit > 0
+                                  ? (memberDetail.currentWeek.sessionsUsed / memberDetail.currentWeek.sessionsLimit) * 100
+                                  : 0)}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
                       </div>
 
                       {/* Subscription */}
@@ -403,9 +456,11 @@ export default function Admin() {
                         </div>
                       )}
 
-                      {/* Override Actions */}
+                      {/* Override Actions with Confirmation */}
                       <div>
-                        <h4 className="font-medium mb-2">Apply Override</h4>
+                        <h4 className="font-medium mb-2 flex items-center gap-2">
+                          <ShieldAlert className="h-4 w-4" /> Apply Override
+                        </h4>
                         <div className="space-y-3">
                           <Select value={overrideType} onValueChange={setOverrideType}>
                             <SelectTrigger>
@@ -414,8 +469,8 @@ export default function Admin() {
                             <SelectContent>
                               <SelectItem value="add_sessions">Add Sessions</SelectItem>
                               <SelectItem value="remove_sessions">Remove Sessions</SelectItem>
-                              <SelectItem value="suspend">Suspend</SelectItem>
-                              <SelectItem value="reactivate">Reactivate</SelectItem>
+                              <SelectItem value="suspend">Suspend Account</SelectItem>
+                              <SelectItem value="reactivate">Reactivate Account</SelectItem>
                             </SelectContent>
                           </Select>
                           {(overrideType === "add_sessions" || overrideType === "remove_sessions") && (
@@ -431,13 +486,81 @@ export default function Admin() {
                             value={overrideReason}
                             onChange={(e) => setOverrideReason(e.target.value)}
                           />
-                          <Button
-                            onClick={handleApplyOverride}
-                            disabled={applyOverride.isPending}
-                            size="sm"
-                          >
-                            {applyOverride.isPending ? "Applying..." : "Apply Override"}
-                          </Button>
+
+                          {/* Confirmation dialog for risky actions */}
+                          {overrideType === "suspend" || overrideType === "reactivate" ? (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant={overrideType === "suspend" ? "destructive" : "default"}
+                                  size="sm"
+                                  disabled={!overrideReason || applyOverride.isPending}
+                                >
+                                  {applyOverride.isPending
+                                    ? "Applying..."
+                                    : overrideType === "suspend"
+                                    ? "Suspend Account"
+                                    : "Reactivate Account"}
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>
+                                    {overrideType === "suspend"
+                                      ? "Suspend this member?"
+                                      : "Reactivate this member?"}
+                                  </AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    {overrideType === "suspend"
+                                      ? `This will immediately prevent ${memberDetail.user?.name || "this user"} from booking sessions or accessing their account. They will need to be manually reactivated.`
+                                      : `This will restore ${memberDetail.user?.name || "this user"}'s access to book sessions and use their account.`}
+                                    <br /><br />
+                                    <strong>Reason:</strong> {overrideReason}
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={handleApplyOverride}
+                                    className={overrideType === "suspend" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}
+                                  >
+                                    Confirm {overrideType === "suspend" ? "Suspension" : "Reactivation"}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          ) : (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  disabled={!overrideReason || applyOverride.isPending}
+                                >
+                                  {applyOverride.isPending ? "Applying..." : "Apply Override"}
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Confirm Override</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    You are about to <strong>{overrideType.replace("_", " ")}</strong>
+                                    {overrideDelta ? ` (${overrideDelta} sessions)` : ""} for{" "}
+                                    <strong>{memberDetail.user?.name || "this user"}</strong>.
+                                    <br /><br />
+                                    <strong>Reason:</strong> {overrideReason}
+                                    <br /><br />
+                                    This action will be recorded in the audit trail.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={handleApplyOverride}>
+                                    Confirm Override
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
                         </div>
                       </div>
 
@@ -450,7 +573,7 @@ export default function Admin() {
                               <div key={o.id} className="p-2 border rounded text-sm">
                                 <div className="flex items-center gap-2">
                                   {statusBadge(o.changeType)}
-                                  {o.sessionDelta && (
+                                  {o.sessionDelta != null && (
                                     <span className="text-xs text-muted-foreground">
                                       ({o.sessionDelta > 0 ? "+" : ""}{o.sessionDelta} sessions)
                                     </span>
@@ -489,16 +612,35 @@ export default function Admin() {
               </Dialog>
             </TabsContent>
 
-            {/* ── Bookings Tab ─────────────────────────────────────── */}
+            {/* ═══════════════════════════════════════════════════════════
+                BOOKINGS TAB — with status filter and confirmation modals
+            ═══════════════════════════════════════════════════════════ */}
             <TabsContent value="bookings">
               <Card className="border-2">
                 <CardHeader>
-                  <CardTitle className="text-xl sm:text-2xl">All Bookings</CardTitle>
-                  <CardDescription>Manage and update booking statuses</CardDescription>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <CardTitle className="text-xl sm:text-2xl">All Bookings</CardTitle>
+                      <CardDescription>Manage and update booking statuses</CardDescription>
+                    </div>
+                    <Select value={bookingStatusFilter} onValueChange={setBookingStatusFilter}>
+                      <SelectTrigger className="w-[160px]">
+                        <SelectValue placeholder="Filter status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="confirmed">Confirmed</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="no_show">No Show</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="overflow-x-auto">
-                    {bookings && bookings.length > 0 ? (
+                    {filteredBookings && filteredBookings.length > 0 ? (
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -511,7 +653,7 @@ export default function Admin() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {bookings.map((b) => (
+                          {filteredBookings.map((b) => (
                             <TableRow key={b.id}>
                               <TableCell className="font-mono text-xs">#{b.id}</TableCell>
                               <TableCell className="text-xs">{b.userId}</TableCell>
@@ -541,16 +683,36 @@ export default function Admin() {
                                     </Button>
                                   )}
                                   {(b.status === "confirmed" || b.status === "pending") && (
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="text-xs h-7 text-destructive"
-                                      onClick={() =>
-                                        updateBookingStatus.mutate({ id: b.id, status: "no_show" })
-                                      }
-                                    >
-                                      No Show
-                                    </Button>
+                                    <AlertDialog>
+                                      <AlertDialogTrigger asChild>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="text-xs h-7 text-destructive"
+                                        >
+                                          No Show
+                                        </Button>
+                                      </AlertDialogTrigger>
+                                      <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                          <AlertDialogTitle>Mark as No Show?</AlertDialogTitle>
+                                          <AlertDialogDescription>
+                                            This will mark booking #{b.id} as a no-show. The member's session credit will not be returned.
+                                          </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                          <AlertDialogAction
+                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                            onClick={() =>
+                                              updateBookingStatus.mutate({ id: b.id, status: "no_show" })
+                                            }
+                                          >
+                                            Confirm No Show
+                                          </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                      </AlertDialogContent>
+                                    </AlertDialog>
                                   )}
                                 </div>
                               </TableCell>
@@ -559,14 +721,16 @@ export default function Admin() {
                         </TableBody>
                       </Table>
                     ) : (
-                      <p className="text-center py-8 text-muted-foreground">No bookings found</p>
+                      <p className="text-center py-8 text-muted-foreground">No bookings match your filter</p>
                     )}
                   </div>
                 </CardContent>
               </Card>
             </TabsContent>
 
-            {/* ── Session Slots Tab ────────────────────────────────── */}
+            {/* ═══════════════════════════════════════════════════════════
+                SESSION SLOTS TAB
+            ═══════════════════════════════════════════════════════════ */}
             <TabsContent value="sessions">
               <Card className="border-2">
                 <CardHeader>
@@ -584,9 +748,7 @@ export default function Admin() {
                       <DialogContent>
                         <DialogHeader>
                           <DialogTitle>Create Session Slot</DialogTitle>
-                          <DialogDescription>
-                            Add a new bookable session time
-                          </DialogDescription>
+                          <DialogDescription>Add a new bookable session time</DialogDescription>
                         </DialogHeader>
                         <div className="space-y-4">
                           <div>
@@ -666,7 +828,11 @@ export default function Admin() {
                                 {format(new Date(slot.endsAtUtc), "h:mm a")}
                               </TableCell>
                               <TableCell>{slot.capacity}</TableCell>
-                              <TableCell>{slot.bookedCount}</TableCell>
+                              <TableCell>
+                                <span className={slot.bookedCount >= slot.capacity ? "text-red-600 font-medium" : ""}>
+                                  {slot.bookedCount}
+                                </span>
+                              </TableCell>
                               <TableCell className="text-xs">{slot.trainerName || "-"}</TableCell>
                               <TableCell>
                                 {slot.isActive ? statusBadge("active") : statusBadge("cancelled")}
@@ -688,7 +854,9 @@ export default function Admin() {
               </Card>
             </TabsContent>
 
-            {/* ── Subscriptions Tab ────────────────────────────────── */}
+            {/* ═══════════════════════════════════════════════════════════
+                SUBSCRIPTIONS TAB — with churn signals
+            ═══════════════════════════════════════════════════════════ */}
             <TabsContent value="subscriptions">
               <Card className="border-2">
                 <CardHeader>
@@ -707,27 +875,47 @@ export default function Admin() {
                             <TableHead>Status</TableHead>
                             <TableHead>Provider</TableHead>
                             <TableHead>Period End</TableHead>
+                            <TableHead>Risk</TableHead>
                             <TableHead>Created</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {subscriptions.map((sub) => (
-                            <TableRow key={sub.id}>
-                              <TableCell className="font-mono text-xs">#{sub.id}</TableCell>
-                              <TableCell>{sub.userId}</TableCell>
-                              <TableCell>{sub.tierId}</TableCell>
-                              <TableCell>{statusBadge(sub.status)}</TableCell>
-                              <TableCell className="text-xs">{sub.paymentProvider}</TableCell>
-                              <TableCell className="text-xs">
-                                {sub.currentPeriodEnd
-                                  ? format(new Date(sub.currentPeriodEnd), "MMM d, yyyy")
-                                  : "-"}
-                              </TableCell>
-                              <TableCell className="text-xs">
-                                {format(new Date(sub.createdAt), "MMM d, yyyy")}
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                          {subscriptions.map((sub) => {
+                            const isExpiringSoon = sub.currentPeriodEnd &&
+                              differenceInDays(new Date(sub.currentPeriodEnd), new Date()) <= 7 &&
+                              sub.status === "active";
+                            return (
+                              <TableRow key={sub.id}>
+                                <TableCell className="font-mono text-xs">#{sub.id}</TableCell>
+                                <TableCell>{sub.userId}</TableCell>
+                                <TableCell>{sub.tierId}</TableCell>
+                                <TableCell>{statusBadge(sub.status)}</TableCell>
+                                <TableCell className="text-xs">{sub.paymentProvider}</TableCell>
+                                <TableCell className="text-xs">
+                                  {sub.currentPeriodEnd
+                                    ? format(new Date(sub.currentPeriodEnd), "MMM d, yyyy")
+                                    : "-"}
+                                </TableCell>
+                                <TableCell>
+                                  {isExpiringSoon && (
+                                    <Badge variant="outline" className="text-xs border-orange-300 text-orange-700 gap-1">
+                                      <AlertTriangle className="h-3 w-3" />
+                                      Expiring soon
+                                    </Badge>
+                                  )}
+                                  {sub.status === "past_due" && (
+                                    <Badge variant="outline" className="text-xs border-red-300 text-red-700 gap-1">
+                                      <AlertTriangle className="h-3 w-3" />
+                                      Payment failed
+                                    </Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-xs">
+                                  {format(new Date(sub.createdAt), "MMM d, yyyy")}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
                         </TableBody>
                       </Table>
                     ) : (
@@ -738,7 +926,9 @@ export default function Admin() {
               </Card>
             </TabsContent>
 
-            {/* ── Revenue Tab ──────────────────────────────────────── */}
+            {/* ═══════════════════════════════════════════════════════════
+                REVENUE TAB
+            ═══════════════════════════════════════════════════════════ */}
             <TabsContent value="revenue">
               <div className="grid sm:grid-cols-3 gap-4 mb-6">
                 <Card className="border-2">
@@ -776,8 +966,7 @@ export default function Admin() {
                 <CardHeader>
                   <CardTitle className="text-xl">Revenue Details</CardTitle>
                   <CardDescription>
-                    Payment transaction data is tracked via Stripe webhooks. View detailed breakdowns
-                    in your Stripe Dashboard.
+                    Payment transaction data is tracked via Stripe webhooks.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -786,21 +975,17 @@ export default function Admin() {
                     <p className="text-muted-foreground mb-3">
                       Detailed revenue charts coming soon
                     </p>
-                    <a
-                      href="https://dashboard.stripe.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Button variant="outline" size="sm">
-                        Open Stripe Dashboard
-                      </Button>
+                    <a href="https://dashboard.stripe.com" target="_blank" rel="noopener noreferrer">
+                      <Button variant="outline" size="sm">Open Stripe Dashboard</Button>
                     </a>
                   </div>
                 </CardContent>
               </Card>
             </TabsContent>
 
-            {/* ── Overrides Tab ────────────────────────────────────── */}
+            {/* ═══════════════════════════════════════════════════════════
+                OVERRIDES TAB
+            ═══════════════════════════════════════════════════════════ */}
             <TabsContent value="overrides">
               <Card className="border-2">
                 <CardHeader>
@@ -814,6 +999,25 @@ export default function Admin() {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            {/* ═══════════════════════════════════════════════════════════
+                AUDIT LOG TAB
+            ═══════════════════════════════════════════════════════════ */}
+            <TabsContent value="audit">
+              <Card className="border-2">
+                <CardHeader>
+                  <CardTitle className="text-xl sm:text-2xl flex items-center gap-2">
+                    <FileText className="h-5 w-5" /> Audit Log
+                  </CardTitle>
+                  <CardDescription>
+                    System-wide audit trail of authentication events, admin actions, and security events
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <AuditLogTable />
+                </CardContent>
+              </Card>
+            </TabsContent>
           </Tabs>
         </div>
       </div>
@@ -821,7 +1025,7 @@ export default function Admin() {
   );
 }
 
-/** Sub-component for the overrides table to keep the main component cleaner */
+/** Sub-component for the overrides table */
 function OverridesTable() {
   const { data: overrides } = trpc.admin.getOverrides.useQuery();
 
@@ -850,14 +1054,78 @@ function OverridesTable() {
               <TableCell>{o.userId}</TableCell>
               <TableCell>{o.adminUserId}</TableCell>
               <TableCell>
-                <Badge variant="outline" className="text-xs">
-                  {o.changeType}
-                </Badge>
+                <Badge variant="outline" className="text-xs">{o.changeType}</Badge>
               </TableCell>
               <TableCell>{o.sessionDelta ?? "-"}</TableCell>
               <TableCell className="text-xs max-w-[200px] truncate">{o.reason}</TableCell>
               <TableCell className="text-xs">
                 {format(new Date(o.createdAt), "MMM d, h:mm a")}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+/** Sub-component for the audit log table */
+function AuditLogTable() {
+  const { data: auditLogs, isLoading } = trpc.admin.getAuditLogs.useQuery();
+
+  if (isLoading) {
+    return <p className="text-center py-8 text-muted-foreground">Loading audit logs...</p>;
+  }
+
+  if (!auditLogs || auditLogs.length === 0) {
+    return <p className="text-center py-8 text-muted-foreground">No audit log entries yet</p>;
+  }
+
+  const actionBadge = (action: string) => {
+    const colors: Record<string, string> = {
+      "auth.login": "bg-green-100 text-green-800",
+      "auth.register": "bg-blue-100 text-blue-800",
+      "auth.logout": "bg-gray-100 text-gray-800",
+      "auth.login.failed": "bg-red-100 text-red-800",
+      "auth.login.blocked": "bg-red-200 text-red-900",
+      "auth.otp.requested": "bg-yellow-100 text-yellow-800",
+    };
+    return (
+      <Badge className={`text-xs ${colors[action] || "bg-gray-100 text-gray-800"}`}>
+        {action}
+      </Badge>
+    );
+  };
+
+  return (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>ID</TableHead>
+            <TableHead>Action</TableHead>
+            <TableHead>User ID</TableHead>
+            <TableHead>Entity</TableHead>
+            <TableHead>Details</TableHead>
+            <TableHead>IP</TableHead>
+            <TableHead>Time</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {auditLogs.map((log: any) => (
+            <TableRow key={log.id}>
+              <TableCell className="font-mono text-xs">#{log.id}</TableCell>
+              <TableCell>{actionBadge(log.action)}</TableCell>
+              <TableCell className="text-xs">{log.userId ?? "-"}</TableCell>
+              <TableCell className="text-xs">
+                {log.entityType ? `${log.entityType}${log.entityId ? `#${log.entityId}` : ""}` : "-"}
+              </TableCell>
+              <TableCell className="text-xs max-w-[200px] truncate">
+                {log.details || "-"}
+              </TableCell>
+              <TableCell className="text-xs font-mono">{log.ipAddress || "-"}</TableCell>
+              <TableCell className="text-xs">
+                {format(new Date(log.createdAt), "MMM d, h:mm a")}
               </TableCell>
             </TableRow>
           ))}

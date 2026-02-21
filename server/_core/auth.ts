@@ -97,5 +97,10 @@ export async function authenticateRequest(req: Request): Promise<User> {
     throw ForbiddenError("User not found");
   }
 
+  // Check if user is suspended
+  if (user.status === "suspended") {
+    throw ForbiddenError("Your account has been suspended. Please contact support.");
+  }
+
   return user;
 }

@@ -453,6 +453,25 @@ export const appRouter = router({
           to: input?.to ? new Date(input.to) : undefined,
         });
       }),
+    getAuditLogs: adminProcedure
+      .input(
+        z
+          .object({
+            userId: z.number().optional(),
+            action: z.string().optional(),
+            entityType: z.string().optional(),
+            limit: z.number().min(1).max(500).optional(),
+          })
+          .optional()
+      )
+      .query(async ({ input }) => {
+        return await db.getAuditLogs({
+          userId: input?.userId,
+          action: input?.action,
+          entityType: input?.entityType,
+          limit: input?.limit,
+        });
+      }),
   }),
 });
 

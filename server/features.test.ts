@@ -11,6 +11,7 @@ function createTestContext(isAdmin = false, userId = 1): { ctx: TrpcContext } {
     name: `Test User ${userId}`,
     passwordHash: null,
     role: isAdmin ? "admin" : "user",
+    status: "active",
     createdAt: new Date(),
     updatedAt: new Date(),
     lastSignedIn: new Date(),
@@ -562,5 +563,32 @@ describe("Input Validation", () => {
         capacity: 0,
       })
     ).rejects.toThrow();
+  });
+});
+
+// ─── Audit Logs ───────────────────────────────────────────────────────────
+
+describe("Audit Logs", () => {
+  it("should allow admin users to view audit logs", async () => {
+    const { ctx } = createTestContext(true);
+    const caller = appRouter.createCaller(ctx);
+    const logs = await caller.admin.getAuditLogs();
+    expect(Array.isArray(logs)).toBe(true);
+  });
+
+  it("should deny non-admin users from viewing audit logs", async () => {
+    const { ctx } = createTestContext(false);
+    const caller = appRouter.createCaller(ctx);
+    await expect(caller.admin.getAuditLogs()).rejects.toThrow();
+  });
+
+  it("should accept filter parameters for audit logs", async () => {
+    const { ctx } = createTestContext(true);
+    const caller = appRouter.createCaller(ctx);
+    const logs = await caller.admin.getAuditLogs({
+      action: "auth.login",
+      limit: 10,
+    });
+    expect(Array.isArray(logs)).toBe(true);
   });
 });
